@@ -12,93 +12,49 @@ DESCRIPTION
     encryption, and redirection to extract any of the following values:
 
     *   active_threads
-
     *   bytes_per_request (measured in bytes)
-
     *   bytes_per_second (measured in bytes per second)
-
     *   cpu_load (measured in percent)
-
     *   cpu_usage_system (measured in percent)
-
     *   cpu_usage_system_children (measured in percent)
-
     *   cpu_usage_total (measured in percent)
-
     *   cpu_usage_user (measured in percent)
-
     *   cpu_usage_user_children (measured in percent)
-
     *   idle_threads
-
     *   parent_server_generation
-
     *   requests_per_second
-
     *   server_uptime (does not require thresholds)
-
     *   server_version (does not require thresholds)
-
     *   slots_open
-
     *   slots_total
-
     *   ssl_average_session_time_remaining (measured in seconds)
-
     *   ssl_cache_remove_hits (does not require thresholds)
-
     *   ssl_cache_remove_misses (does not require thresholds)
-
     *   ssl_cache_retrieve_hits (does not require thresholds)
-
     *   ssl_cache_retrieve_misses (does not require thresholds)
-
     *   ssl_cache_type (does not require thresholds)
-
     *   ssl_cache_usage (measured in percent)
-
     *   ssl_current_sessions (does not require thresholds)
-
     *   ssl_expired_sessions (does not require thresholds)
-
     *   ssl_highest_session_time_remaining (measured in seconds)
-
     *   ssl_index_usage (measured in percent)
-
     *   ssl_indexes_per_subcache (does not require thresholds)
-
     *   ssl_lowest_session_time_remaining (measured in seconds)
-
     *   ssl_shared_memory (measured in bytes, does not require thresholds)
-
     *   ssl_subcaches (does not require thresholds)
-
     *   ssl_total_sessions (does not require thresholds)
-
     *   ssl_uncached_unexpired_sessions (does not require thresholds)
-
     *   threads_closing_connection
-
     *   threads_dns_lookup
-
     *   threads_gracefully_finishing
-
     *   threads_idly_cleaning
-
     *   threads_keepalive
-
     *   threads_logging
-
     *   threads_reading_request
-
     *   threads_sending_reply
-
     *   threads_starting_up
-
     *   threads_waiting_for_connection
-
     *   total_accesses (does not require thresholds)
-
     *   total_traffic (measured in bytes, does not require thresholds)
 
         Note: mod_status calculates requests_per_second and bytes_per_second

@@ -1,0 +1,863 @@
+#!/usr/bin/perl -w
+
+=head1 NAME
+
+check_apache - Nagios plugin to poll Apache mod_status information
+
+=cut
+
+# The POD text continues at the end of the file.
+
+use strict;
+
+use Data::Dumper;   ### For generating debug output in verbose mode
+use LWP::UserAgent; ### For communicating with the webserver
+use Nagios::Plugin; ### For communicating with the nagios server
+
+
+### Know what we're working with
+my %measurements = (
+	'active_threads' => {
+		unit_of_measurement => '',
+		requires_thresholds => 1,
+		parser => sub {
+			if($_[0] =~ /(\d*) requests currently being processed/) {
+				return $1;
+			}
+		},
+	},
+	'cpu_load' => {
+		unit_of_measurement => '%',
+		requires_thresholds => 1,
+		parser	=> sub {
+			if($_[0] =~ /([\d\.]*)\% CPU load/) {
+				return sprintf('%03.3f',$1);
+			}
+		},
+	},
+	'idle_threads' => {
+		unit_of_measurement => '',
+		requires_thresholds => 1,
+		parser => sub {
+			if($_[0] =~ /(\d*) idle workers/) {
+				return $1;
+			}
+		},
+	},
+	'server_version' => {
+		unit_of_measurement => '',
+		requires_thresholds => 0,
+		parser => sub {
+			if($_[0] =~ /Server Version: ([^\<]*)\</) {
+				return $1;
+			}
+		}
+	},
+	'requests_per_second' => {
+		unit_of_measurement => '',
+		requires_thresholds => 1,
+		parser => sub {
+			if($_[0] =~ /([\d\.]*) requests\/sec/) {
+				return sprintf('%05.3f',$1);
+			}
+		},
+	},
+	'server_uptime' => {
+		unit_of_measurement => '',
+		requires_thresholds => 0,
+		parser => sub {
+			if($_[0] =~ /Server uptime: ([^\<]*)\</) {
+				return $1;
+			} 
+		},
+	},
+	'parent_server_generation' => {
+		unit_of_measurement => '',
+		requires_thresholds => 1,
+		parser => sub {
+			if($_[0] =~ /Parent Server Generation: (\d*)/) {
+				return $1;
+			} 
+		},
+	},
+	'bytes_per_second' => {
+		unit_of_measurement => 'BPS',
+		requires_thresholds => 1,
+		parser => sub {
+			if($_[0] =~ /([\d\.]*) ([kmgtp]?B)\/second/) {
+				return scale_to_bytes($1,$2);
+			} 
+		},
+	},
+	'bytes_per_request' => {
+		unit_of_measurement => 'B',
+		requires_thresholds => 1,
+		parser => sub {
+			if($_[0] =~ /([\d\.]*) ([kgtp]?B)\/request/) {
+				return scale_to_bytes($1,$2);
+			} 
+		},
+	},
+	'total_accesses' => {
+		unit_of_measurement => '',
+		requires_thresholds => 0,
+		parser => sub {
+			if($_[0] =~ /Total accesses: (\d*)/) {
+				return $1;
+			} 
+		},
+	},
+	'total_traffic' => {
+		unit_of_measurement => 'B',
+		requires_thresholds => 0,
+		parser => sub {
+			if($_[0] =~ /Total Traffic: ([\d\.]*) ([kgtp]?B)/) {
+				return scale_to_bytes($1,$2);
+			} 
+		},
+	},
+	'cpu_usage_user' => {
+		unit_of_measurement => '%',
+		requires_thresholds => 1,
+		parser => sub {
+			if($_[0] =~ /CPU Usage: u(\d*\.?\d*)/) {
+				return sprintf('%03.5f',$1);
+			} 
+		},
+	},
+	'cpu_usage_system' => {
+		unit_of_measurement => '%',
+		requires_thresholds => 1,
+		parser => sub {
+			if($_[0] =~ /CPU Usage: u(\d*\.?\d*) s(\d*\.?\d*) cu(\d*\.?\d*) cs(\d*\.?\d*) -/) {
+				return sprintf('%03.5f',$2);
+			} 
+		},
+	},
+	'cpu_usage_user_children' => {
+		unit_of_measurement => '%',
+		requires_thresholds => 1,
+		parser => sub {
+			if($_[0] =~ /CPU Usage: u(\d*\.?\d*) s(\d*\.?\d*) cu(\d*\.?\d*) cs(\d*\.?\d*) -/) {
+				return sprintf('%03.5f',$3);
+			} 
+		},
+	},
+	'cpu_usage_system_children' => {
+		unit_of_measurement => '%',
+		requires_thresholds => 1,
+		parser => sub {
+			if($_[0] =~ /CPU Usage: u(\d*\.?\d*) s(\d*\.?\d*) cu(\d*\.?\d*) cs(\d*\.?\d*) -/) {
+				return sprintf('%03.5f',$4);
+			} 
+		},
+	},
+	'cpu_usage_total' => {
+		unit_of_measurement => '%',
+		requires_thresholds => 1,
+		parser => sub {
+			if($_[0] =~ /CPU Usage: u(\d*\.?\d*) s(\d*\.?\d*) cu(\d*\.?\d*) cs(\d*\.?\d*) -/) {
+				return sprintf('%03.5f',$1 + $2 + $3 + $4);
+			} 
+		},
+	},
+	'ssl_cache_type' => {
+		unit_of_measurement => '',
+		requires_thresholds => 0,
+		parser => sub {
+			if($_[0] =~ /cache type: <b>([^\<]*)\</) {
+				return $1;
+			} 
+		},
+	},
+	'ssl_shared_memory' => {
+		unit_of_measurement => 'B',
+		requires_thresholds => 0,
+		parser => sub {
+			if($_[0] =~ /shared memory: <b>([^\<]*)\</) {
+				return $1;
+			} 
+		},
+	},
+	'ssl_current_sessions' => {
+		unit_of_measurement => '',
+		requires_thresholds => 0,
+		parser => sub {
+			if($_[0] =~ /current sessions: <b>([^\<]*)\</) {
+				return $1;
+			} 
+		},
+	},
+	'ssl_subcaches' => {
+		unit_of_measurement => '',
+		requires_thresholds => 0,
+		parser => sub {
+			if($_[0] =~ /subcaches: <b>([^\<]*)\</) {
+				return $1;
+			} 
+		},
+	},
+	'ssl_indexes_per_subcache' => {
+		unit_of_measurement => '',
+		requires_thresholds => 0,
+		parser => sub {
+			if($_[0] =~ /indexes per subcache: <b>([^\<]*)\</) {
+				return $1;
+			} 
+		},
+	},
+	'ssl_average_session_time_remaining' => {
+		unit_of_measurement => 's',
+		requires_thresholds => 1,
+		parser => sub {
+			if($_[0] =~ /time left on oldest entries' SSL sessions: avg: <b>([^\<]*)\</) {
+				return $1;
+			} 
+		},
+	},
+	'ssl_lowest_session_time_remaining' => {
+		unit_of_measurement => 's',
+		requires_thresholds => 1,
+		parser => sub {
+			if($_[0] =~ /\(range: (\d*)...\d*\)/) {
+				return $1;
+			} 
+		},
+	},
+	'ssl_highest_session_time_remaining' => {
+		unit_of_measurement => 's',
+		requires_thresholds => 1,
+		parser => sub {
+			if($_[0] =~ /\(range: \d*...(\d*)\)/) {
+				return $1;
+			} 
+		},
+	},
+	'ssl_index_usage' => {
+		unit_of_measurement => '%',
+		requires_thresholds => 1,
+		parser => sub {
+			if($_[0] =~ /index usage: <b>([^\%]*)\%/) {
+				return $1;
+			} 
+		},
+	},
+	'ssl_cache_usage' => {
+		unit_of_measurement => '%',
+		requires_thresholds => 1,
+		parser => sub {
+			if($_[0] =~ /cache usage: <b>([^\%]*)\%/) {
+				return $1;
+			} 
+		},
+	},
+	'ssl_total_sessions' => {
+		unit_of_measurement => '',
+		requires_thresholds => 0,
+		parser => sub {
+			if($_[0] =~ /total sessions stored since starting: <b>([^\<]*)\</) {
+				return $1;
+			} 
+		},
+	},
+	'ssl_expired_sessions' => {
+		unit_of_measurement => '',
+		requires_thresholds => 0,
+		parser => sub {
+			if($_[0] =~ /total sessions expired since starting: <b>([^\<]*)\</) {
+				return $1;
+			} 
+		},
+	},
+	'ssl_uncached_unexpired_sessions' => {
+		unit_of_measurement => '',
+		requires_thresholds => 0,
+		parser => sub {
+			if($_[0] =~ /total \(pre-expiry\) sessions scrolled out of the cache: <b>([^\<]*)\</) {
+				return $1;
+			} 
+		},
+	},
+	'ssl_cache_retrieve_hits' => {
+		unit_of_measurement => '',
+		requires_thresholds => 0,
+		parser => sub {
+			if($_[0] =~ /total retrieves since starting: \<b\>(\d*)\<\/b\> hit, \<b\>\d*</) {
+				return $1;
+			} 
+		},
+	},
+	'ssl_cache_retrieve_misses' => {
+		unit_of_measurement => '',
+		requires_thresholds => 0,
+		parser => sub {
+			if($_[0] =~ /total retrieves since starting: \<b\>\d*\<\/b\> hit, \<b\>(\d*)</) {
+				return $1;
+			} 
+		},
+	},
+	'ssl_cache_remove_hits' => {
+		unit_of_measurement => '',
+		requires_thresholds => 0,
+		parser => sub {
+			if($_[0] =~ /total removes since starting: \<b\>(\d*)\<\/b\> hit, \<b\>\d*</) {
+				return $1;
+			} 
+		},
+	},
+	'ssl_cache_remove_misses' => {
+		unit_of_measurement => '',
+		requires_thresholds => 0,
+		parser => sub {
+			if($_[0] =~ /total removes since starting: \<b\>\d*\<\/b\> hit, \<b\>(\d*)</) {
+				return $1;
+			} 
+		},
+	},
+	'threads_waiting_for_connection' => {
+		unit_of_measurement => '',
+		requires_thresholds => 1,
+		parser => sub {
+			if($_[0] =~ /\<pre\>([^\<]*\<)/) {
+				return ($1 =~ tr/_//);
+			}
+		}
+	},
+	'threads_starting_up' => {
+		unit_of_measurement => '',
+		requires_thresholds => 1,
+		parser => sub {
+			if($_[0] =~ /\<pre\>([^\<]*\<)/) {
+				return ($1 =~ tr/S//);
+			}
+		}
+	},
+	'threads_reading_request' => {
+		unit_of_measurement => '',
+		requires_thresholds => 1,
+		parser => sub {
+			if($_[0] =~ /\<pre\>([^\<]*\<)/) {
+				return ($1 =~ tr/R//);
+			}
+		}
+	},
+	'threads_sending_reply' => {
+		unit_of_measurement => '',
+		requires_thresholds => 1,
+		parser => sub {
+			if($_[0] =~ /\<pre\>([^\<]*\<)/) {
+				return ($1 =~ tr/W//);
+			}
+		}
+	},
+	'threads_keepalive' => {
+		unit_of_measurement => '',
+		requires_thresholds => 1,
+		parser => sub {
+			if($_[0] =~ /\<pre\>([^\<]*\<)/) {
+				return ($1 =~ tr/K//);
+			}
+		}
+	},
+	'threads_dns_lookup' => {
+		unit_of_measurement => '',
+		requires_thresholds => 1,
+		parser => sub {
+			if($_[0] =~ /\<pre\>([^\<]*\<)/) {
+				return ($1 =~ tr/D//);
+			}
+		}
+	},
+	'threads_closing_connection' => {
+		unit_of_measurement => '',
+		requires_thresholds => 1,
+		parser => sub {
+			if($_[0] =~ /\<pre\>([^\<]*\<)/) {
+				return ($1 =~ tr/C//);
+			}
+		}
+	},
+	'threads_logging' => {
+		unit_of_measurement => '',
+		requires_thresholds => 1,
+		parser => sub {
+			if($_[0] =~ /\<pre\>([^\<]*\<)/) {
+				return ($1 =~ tr/L//);
+			}
+		}
+	},
+	'threads_gracefully_finishing' => {
+		unit_of_measurement => '',
+		requires_thresholds => 1,
+		parser => sub {
+			if($_[0] =~ /\<pre\>([^\<]*\<)/) {
+				return ($1 =~ tr/G//);
+			}
+		}
+	},
+	'threads_idly_cleaning' => {
+		unit_of_measurement => '',
+		requires_thresholds => 1,
+		parser => sub {
+			if($_[0] =~ /\<pre\>([^\<]*\<)/) {
+				return ($1 =~ tr/I//);
+			}
+		}
+	},
+	'slots_total' => {
+		unit_of_measurement => '',
+		requires_thresholds => 1,
+		parser => sub {
+			if($_[0] =~ /\<pre\>([^\<]*\<)/) {
+				return ($1 =~ tr/[_SRWKDCLGI\.]//);
+			}
+		}
+	},
+	'slots_open' => {
+		unit_of_measurement => '',
+		requires_thresholds => 1,
+		parser => sub {
+			if($_[0] =~ /\<pre\>([^\<]*\<)/) {
+				return ($1 =~ tr/\.//);
+			}
+		}
+	},
+);
+my $available_measurements = join(', ', sort(keys(%measurements)));
+
+
+### Initialize the plugin
+my $plugin = Nagios::Plugin->new( 
+	shortname => "APACHE",
+    usage => "Usage: check_apache -H <host_name> -m <measurement> "
+    	    ."(-w <warning_threshold> -c <critical_threshold>) [-P <port>] "
+			."[-v] [-t <timeout>] [-S] [-u <username> -p <password>]",
+	version => '0.2.1',
+	url     => 'http://fragmentedzen.com/software/check_apache',
+	license => 'This nagios plugin is free software, and comes with '
+			  ."ABSOLUTELY NO WARRANTY.\nIt may be used, redistributed "
+			  ."and/or modified under the terms of the \nGNU General "
+			  .'Public Licence. See LICENSE.txt for more information.',
+	plugin  => 'check_apache',
+	extra	=> "\nAvailable measurements: $available_measurements.\n"
+);
+
+
+### Add arguments for secure mode, username, and password
+$plugin->add_arg(
+	spec => 'warning|w=s',
+	help => "-w, --warning=INTEGER\n   Threshold at which this measurement "
+		   .'should generate a WARNING condiiton'
+);
+$plugin->add_arg(
+	spec => 'critical|c=s',
+	help => "-c, --critical=INTEGER\n   Threshold at which this measurement "
+		   .'should generate a CRITICAL condiiton'
+);
+$plugin->add_arg(
+	spec => 'host_name|H=s',
+	help => "-H --host_name=STRING",
+	required => 1
+);
+$plugin->add_arg(
+	spec => 'measurement|m=s',
+	help => "-m --measurement=STRING",
+	required => 1
+);
+$plugin->add_arg(
+	spec => 'secure_connection|S',
+	help => "-S --secure_connection\n   Use SSL / HTTPS rather than HTTP"
+);
+$plugin->add_arg(
+	spec => 'username|u=s',
+	help => "-u --username=STRING\n   Username to provide if required"
+);
+$plugin->add_arg(
+	spec => 'password|p=s',
+	help => "-p --password=STRING\n   Password to provide if required"
+);
+$plugin->add_arg(
+	spec => 'status_path=s',
+	help => "--status_path=STRING\n   Path to mod_status data (default /server-status)",
+	default => '/server-status'
+);
+$plugin->add_arg(
+	spec => 'port|P=s',
+	help => "-P --port=INTEGER\n   Port on which HTTPD is listening (default 80)",
+	default => 80
+);
+
+
+### Parse command line options
+$plugin->getopts;
+$plugin->set_thresholds(
+	warning => $plugin->opts->warning,
+	critical => $plugin->opts->critical,
+);
+print 'Dump of $plugin: ' . Dumper($plugin) if $plugin->opts()->verbose >= 3;
+
+
+### Make sure we have all of the command line arguments we need
+unless(defined($measurements{$plugin->opts->measurement})){
+	my $response = 'Invalid measurement: ' . $plugin->opts->measurement;
+	print "$response\nAvailable measurements: $available_measurements\n"
+		  if $plugin->opts->verbose >= 2;
+	$plugin->nagios_exit(UNKNOWN, $response);
+}
+if($measurements{$plugin->opts->measurement}->{requires_thresholds} && !($plugin->opts->warning && $plugin->opts->critical)){
+	my $response = 'Measurement '.$plugin->opts->measurement.' requires thresholds.';
+	print "$response\nPlease provide some thresholds with -w <warning_level> and -c <critical_level>"
+		if $plugin->opts->verbose >= 2;
+	$plugin->nagios_exit(UNKNOWN, $response);
+}
+
+
+### Set timeout clock
+alarm($plugin->opts()->timeout);
+local $SIG{ALRM} = sub { 
+	$plugin->nagios_exit( UNKNOWN, "Host timed out" );
+};
+
+
+### Construct and get the URL
+my $url = ($plugin->opts->secure_connection?'https':'http') . '://'
+		 .$plugin->opts->host_name.':'.$plugin->opts->port
+		 .$plugin->opts->status_path;
+print "Getting URL: $url\n" if $plugin->opts->verbose >= 2;
+my $user_agent = LWP::UserAgent->new;
+my $request = HTTP::Request->new( GET=> $url );
+if($plugin->opts->username && $plugin->opts->password) {
+	$request->authorization_basic(
+		$plugin->opts->username,
+		$plugin->opts->password
+	);
+}
+my $response = $user_agent->request($request);
+if($plugin->opts->verbose >= 3) {
+	print "Server response:\n" . $response->as_string . "\n\n"
+}
+
+
+### Stop here unless the request came back OK
+my $response_summary = "Host returned HTTP code $response->{_rc}.";
+unless($response && $response->{_rc} == 200){
+	$plugin->nagios_exit(UNKNOWN, $response_summary);
+}
+
+
+### Parse for what they're looking for
+my $value = $measurements{$plugin->opts->measurement}->{parser}
+			->($response->as_string);
+my $status_message = $plugin->opts->measurement . ' ' . $value
+   . $measurements{$plugin->opts->measurement}->{unit_of_measurement};
+if($plugin->opts->verbose >=2) {
+	print "Server reported $status_message\n",	
+}
+
+
+### Prepare Performance Data and Check Thresholds
+if($measurements{$plugin->opts->measurement}->{requires_thresholds}) {
+	my $status_code = $plugin->check_threshold($value);
+	$plugin->nagios_exit( $status_code, $status_message ) 
+		if $status_code != OK;
+}
+
+
+### Prepare Performance Data
+if($measurements{$plugin->opts->measurement}->{requires_thresholds}){
+	$plugin->add_perfdata(
+		label => $plugin->opts->measurement,
+		value => $value,
+		uom => $measurements{$plugin->opts->measurement}->{unit_of_measurement},
+		threshold => $plugin->threshold
+	);
+}
+
+
+### Return the status message
+$plugin->nagios_exit( OK, $status_message );
+
+
+###
+# scale_to_bytes - scales any integer data size measure to bytes by SI units
+# Takes:
+#    $value - the integer value to be converted
+#    $unit - the unit of measure of the incoming value
+# Returns: that number as represented in bytes
+###
+sub scale_to_bytes{
+	my ($value,$unit) = @_;
+	return int($value / 8) if $unit eq 'b';				### bits
+	return int($value) if $unit eq 'B';					### Bytes
+	return int($value * 1024) if $unit eq 'kB';			### Kilobytes
+	return int($value * (1024 ** 2)) if $unit eq 'mB';	### Megabytes
+	return int($value * (1024 ** 3)) if $unit eq 'gB';	### Gigabytes
+	return int($value * (1024 ** 4)) if $unit eq 'tB';	### Terabytes
+	return int($value * (1024 ** 5)) if $unit eq 'pB';	### Petabytes
+}
+
+
+=head1 DESCRIPTION
+
+This script acts as a plugin module for the Nagios IT infrastructure monitoring 
+system. It polls an Apache HTTPD server for status information through 
+mod_status, parses for the requested value, compares that value against warning
+and critical levels, and responds with a status string and appropriate exit 
+status.
+
+This script handles basic authentication (.htaccess / .htpasswd), SSL 
+encryption, and redirection to extract any of the following values:
+
+=over 4
+
+=item * active_threads
+
+=item * bytes_per_request (measured in bytes)
+
+=item * bytes_per_second (measured in bytes per second)
+
+=item * cpu_load (measured in percent)
+
+=item * cpu_usage_system (measured in percent)
+
+=item * cpu_usage_system_children (measured in percent)
+
+=item * cpu_usage_total (measured in percent)
+
+=item * cpu_usage_user (measured in percent)
+
+=item * cpu_usage_user_children (measured in percent)
+
+=item * idle_threads
+
+=item * parent_server_generation
+
+=item * requests_per_second
+
+=item * server_uptime (does not require thresholds)
+
+=item * server_version (does not require thresholds)
+
+=item * slots_open
+
+=item * slots_total
+
+=item * ssl_average_session_time_remaining (measured in seconds)
+
+=item * ssl_cache_remove_hits (does not require thresholds)
+
+=item * ssl_cache_remove_misses (does not require thresholds)
+
+=item * ssl_cache_retrieve_hits (does not require thresholds)
+
+=item * ssl_cache_retrieve_misses (does not require thresholds)
+
+=item * ssl_cache_type (does not require thresholds)
+
+=item * ssl_cache_usage (measured in percent)
+
+=item * ssl_current_sessions (does not require thresholds)
+
+=item * ssl_expired_sessions (does not require thresholds)
+
+=item * ssl_highest_session_time_remaining (measured in seconds)
+
+=item * ssl_index_usage (measured in percent)
+
+=item * ssl_indexes_per_subcache (does not require thresholds)
+
+=item * ssl_lowest_session_time_remaining (measured in seconds)
+
+=item * ssl_shared_memory (measured in bytes, does not require thresholds)
+
+=item * ssl_subcaches (does not require thresholds)
+
+=item * ssl_total_sessions (does not require thresholds)
+
+=item * ssl_uncached_unexpired_sessions (does not require thresholds)
+
+=item * threads_closing_connection
+
+=item * threads_dns_lookup
+
+=item * threads_gracefully_finishing
+
+=item * threads_idly_cleaning
+
+=item * threads_keepalive
+
+=item * threads_logging
+
+=item * threads_reading_request
+
+=item * threads_sending_reply
+
+=item * threads_starting_up
+
+=item * threads_waiting_for_connection
+
+=item * total_accesses (does not require thresholds)
+
+=item * total_traffic (measured in bytes, does not require thresholds)
+
+Note: mod_status calculates requests_per_second and bytes_per_second as an average of requests and bytes over uptime.  These do not represent a rolling average.
+
+Note: mod_status calculates the following SSL-related values as of the most recent server restart: ssl_total_sessions, ssl_expired_sessions, ssl_uncached_unexpired_sessions, ssl_cache_retrieve_hits, ssl_cache_retrieve_misses, ssl_cache_remove_hits, ssl_cache_remove_misses.
+
+=back
+
+This has been tested with Apache/2.2.10 (Unix) and should work with any HTTPD 2.x running mod_status.  Most Apache HTTPD builds come with mod_status pre-
+compiled: you usually don't have to load it manually.  One way to configure 
+mod_status on an HTTPD server is to include the following in your httpd.conf: 
+
+	ExtendedStatus On
+	<Location /server-status>
+		SetHandler server-status
+		Order deny,allow
+		Deny from all
+		Allow from 127.0.0.1
+		Allow from 192.168.1.10
+	</Location>
+
+You will ideally want to encrypt this through SSL, protect it behind an 
+.htaccess file, or both. At very minimum, it would be good practice to white-
+list any IPs which will need access to status information with 'Allow from'
+directives rather than Allowing from all and relying on a blacklist. 
+
+=head1 SYNOPSIS
+
+=head2 Command Line Interface
+
+Poll status on a server with no encryption or authentication:
+
+	check_apache -H your_host.com -w 160 -c 200 \
+	-m active_threads
+
+Poll status on a server with encryption but no authentication:
+
+	check_apache -S -P 443 -H your_host.com -w 160 \
+	-c 200 -m active_threads
+
+Poll status on a server with encryption and authentication:
+
+	check_apache -S -P 443 -H your_host.com -w 160 \
+	-c 200 -m active_threads -u username -p password
+
+Poll a server with command line options stored in a configuration file:
+
+	check_apache --extra-opts=my_config.ini
+
+=head2 Running within Nagios
+
+In objects/commands.cfg:
+
+	define command{
+        command_name    check_apache
+        command_line    $USER1$/check_apache -H $HOSTNAME$ -m \
+						$ARG1$ -c $ARG2$ -w $ARG3$
+	}
+        
+	define command{
+        command_name    check_apache_ssl
+        command_line    $USER1$/check_apache -H $HOSTNAME$ -m \
+						$ARG1$ -c $ARG2$ -w $ARG3$ -P 443 -S
+	}
+
+	define command{
+        command_name    check_apache_ssl_auth
+        command_line    $USER1$/check_apache -H $HOSTNAME$ -m \
+						$ARG1$ -c $ARG2$ -w $ARG3$ -P 443 -S \
+						-u $ARG4$ -p $ARG5$
+	}
+
+	define command{
+        command_name    check_apache_auth
+        command_line    $USER1$/check_apache -H $HOSTNAME$ -m \
+						$ARG1$ -c $ARG2$ -w $ARG3$ -u $ARG4$ \
+						-p $ARG5$
+	}
+
+In the configuration file for your host with apache running on it:
+
+	define service{
+        use                   local-service
+        host_name             your.hostname.com
+        service_description   Apache Active Threads
+        check_command         check_apache!active_threads200!300
+	}
+
+	define service{
+		use                   local-service
+		host_name             your.encrypted.hostname.com
+		service_description   Apache Active Threads
+		check_command         check_apache_ssl!active_threads200!300
+	}
+
+	define service{
+        use                   local-service
+        host_name             your.cool.hostname.com
+        service_description   Apache Active Threads
+        check_command         check_apache_ssl_auth!active_threads200!300!un!pw
+	}
+
+	define service{
+		use                   local-service
+		host_name             your.passworded.hostname.com
+		service_description   Apache Active Threads
+        check_command         check_apache_auth!active_threads200!300!un!pw
+	}
+
+
+=head1 FREQUENTLY ASKED QUESTION
+
+Q: I've checked all of my command line arguments thrice, but am still getting "APACHE UNKNOWN - 
+Host returned HTTP code 500." on an otherwise working server.  I've even run it with -v and verified that 
+the URI it generates if correct: I can copy and paste it into Firefox and everything and it works there!
+What gives?
+
+A: If you've using SSL, you need to install Crypt::SSLeay.  Also, if you're not polling port 80, don't 
+forget to specify your port with the -P option.
+
+=head1 SEE ALSO
+
+If using an external configuration file, it should be structured according to 
+the specification at <http://nagiosplugins.org/extra-opts/>.
+
+If you intend on processing requests over SSL, you will need the 
+L<Crypt::SSLeay> module installed.
+
+Thresholds given to this script should be in the format specified at 
+<http://nagiosplug.sourceforge.net/developer-guidelines.html#THRESHOLDFORMAT>.
+
+This module is built upon L<Nagios::Plugin> by the Nagios Plugin Development
+Team.  Further reading on Nagios, NPRE, and Nagios Plugins is available at
+<http://nagios.com/>.
+
+=head1 AUTHOR
+
+This script is written and maintained by Dann Stayskal <dann@stayskal.com>
+and is available on his website, at
+<http://fragmentedzen.com/software/check_apache/>.
+
+=head1 LICENSE
+
+Copyright (C) 2009 by Dann Stayskal.
+
+This program is free software; you can redistribute it and/or modify it under 
+the terms of the GNU General Public License as published by the Free Software 
+Foundation; either version 2 of the License, or (at your option) any later 
+version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY 
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A 
+PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with 
+this program; if not, write to the Free Software Foundation, Inc., 59 Temple 
+Place, Suite 330, Boston, MA 02111-1307 USA
+
+Nagios, the Nagios logo, and Nagios graphics are the servicemarks, trademarks, 
+or registered trademarks owned by Nagios Enterprises. All other servicemarks 
+and trademarks are the property of their respective owner.
+
+=cut

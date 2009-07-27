@@ -188,8 +188,7 @@ SEE ALSO
     Crypt::SSLeay module installed.
 
     Thresholds given to this script should be in the format specified at
-    <http://nagiosplug.sourceforge.net/developer-guidelines.html#THRESHOLDFO
-    RMAT>.
+    <http://nagiosplug.sourceforge.net/developer-guidelines.html>.
 
     This module is built upon Nagios::Plugin by the Nagios Plugin
     Development Team. Further reading on Nagios, NPRE, and Nagios Plugins is

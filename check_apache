@@ -783,28 +783,28 @@ In the configuration file for your host with apache running on it:
         use                   local-service
         host_name             your.hostname.com
         service_description   Apache Active Threads
-        check_command         check_apache!active_threads200!300
+        check_command         check_apache!active_threads!200!300
 	}
 
 	define service{
 		use                   local-service
 		host_name             your.encrypted.hostname.com
 		service_description   Apache Active Threads
-		check_command         check_apache_ssl!active_threads200!300
+		check_command         check_apache_ssl!active_threads!200!300
 	}
 
 	define service{
         use                   local-service
         host_name             your.cool.hostname.com
         service_description   Apache Active Threads
-        check_command         check_apache_ssl_auth!active_threads200!300!un!pw
+        check_command         check_apache_ssl_auth!active_threads!200!300!un!pw
 	}
 
 	define service{
 		use                   local-service
 		host_name             your.passworded.hostname.com
 		service_description   Apache Active Threads
-        check_command         check_apache_auth!active_threads200!300!un!pw
+        check_command         check_apache_auth!active_threads!200!300!un!pw
 	}
 
 

@@ -113,60 +113,60 @@ SYNOPSIS
     In objects/commands.cfg:
 
             define command{
-            command_name    check_apache
-            command_line    $USER1$/check_apache -H $HOSTNAME$ -m \
+	            command_name    check_apache
+	            command_line    $USER1$/check_apache -H $HOSTNAME$ -m \
                                                     $ARG1$ -c $ARG2$ -w $ARG3$
             }
             
-        define command{
-            command_name    check_apache_ssl
-            command_line    $USER1$/check_apache -H $HOSTNAME$ -m \
+	        define command{
+	            command_name    check_apache_ssl
+	            command_line    $USER1$/check_apache -H $HOSTNAME$ -m \
                                                     $ARG1$ -c $ARG2$ -w $ARG3$ -P 443 -S
             }
 
             define command{
-            command_name    check_apache_ssl_auth
-            command_line    $USER1$/check_apache -H $HOSTNAME$ -m \
+	            command_name    check_apache_ssl_auth
+	            command_line    $USER1$/check_apache -H $HOSTNAME$ -m \
                                                     $ARG1$ -c $ARG2$ -w $ARG3$ -P 443 -S \
                                                     -u $ARG4$ -p $ARG5$
             }
 
             define command{
-            command_name    check_apache_auth
-            command_line    $USER1$/check_apache -H $HOSTNAME$ -m \
+	            command_name    check_apache_auth
+	            command_line    $USER1$/check_apache -H $HOSTNAME$ -m \
                                                     $ARG1$ -c $ARG2$ -w $ARG3$ -u $ARG4$ \
                                                     -p $ARG5$
             }
 
     In the configuration file for your host with apache running on it:
 
-            define service{
-            use                   local-service
-            host_name             your.hostname.com
-            service_description   Apache Active Threads
-            check_command         check_apache!active_threads200!300
-            }
+	define service{
+		use                   local-service
+		host_name             your.hostname.com
+		service_description   Apache Active Threads
+		check_command         check_apache!active_threads!200!300
+	}
 
-            define service{
-                    use                   local-service
-                    host_name             your.encrypted.hostname.com
-                    service_description   Apache Active Threads
-                    check_command         check_apache_ssl!active_threads200!300
-            }
+	define service{
+		use                   local-service
+		host_name             your.encrypted.hostname.com
+		service_description   Apache Active Threads
+		check_command         check_apache_ssl!active_threads!200!300
+	}
 
-            define service{
-            use                   local-service
-            host_name             your.cool.hostname.com
-            service_description   Apache Active Threads
-            check_command         check_apache_ssl_auth!active_threads200!300!un!pw
-            }
+	define service{
+		use                   local-service
+		host_name             your.cool.hostname.com
+		service_description   Apache Active Threads
+		check_command         check_apache_ssl_auth!active_threads!200!300!un!pw
+	}
 
-            define service{
-                    use                   local-service
-                    host_name             your.passworded.hostname.com
-                    service_description   Apache Active Threads
-            check_command         check_apache_auth!active_threads200!300!un!pw
-            }
+	define service{
+		use                   local-service
+		host_name             your.passworded.hostname.com
+		service_description   Apache Active Threads
+		check_command         check_apache_auth!active_threads!200!300!un!pw
+	}
 
 FREQUENTLY ASKED QUESTION
     Q: I've checked all of my command line arguments thrice, but am still
@@ -197,8 +197,11 @@ SEE ALSO
 AUTHOR
     This script is written and maintained by Dann Stayskal
     <dann@stayskal.com> and is available on his website, at
-    <http://fragmentedzen.com/software/check_apache/>.
+    <http://dann.stayskal.com/software/check_apache/>.
 
+	Thanks to dbenamy <http://github.com/dbenamy> for fixing
+	the example configurations.
+	
 LICENSE
     Copyright (C) 2009 by Dann Stayskal.
 

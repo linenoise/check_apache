@@ -837,7 +837,10 @@ Team.  Further reading on Nagios, NPRE, and Nagios Plugins is available at
 
 This script is written and maintained by Dann Stayskal <dann@stayskal.com>
 and is available on his website, at
-<http://fragmentedzen.com/software/check_apache/>.
+<http://dann.stayskal.com/software/check_apache/>.
+
+Thanks to dbenamy <http://github.com/dbenamy> for fixing
+the example configurations.
 
 =head1 LICENSE
 

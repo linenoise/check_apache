@@ -433,7 +433,7 @@ my $plugin = Nagios::Plugin->new(
     	    ."(-w <warning_threshold> -c <critical_threshold>) [-P <port>] "
 			."[-v] [-t <timeout>] [-S] [-u <username> -p <password>]",
 	version => '0.2.1',
-	url     => 'http://fragmentedzen.com/software/check_apache',
+	url     => 'http://dann.stayskal.com/software/check_apache',
 	license => 'This nagios plugin is free software, and comes with '
 			  ."ABSOLUTELY NO WARRANTY.\nIt may be used, redistributed "
 			  ."and/or modified under the terms of the \nGNU General "

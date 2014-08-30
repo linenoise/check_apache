@@ -526,6 +526,7 @@ my $url = ($plugin->opts->secure_connection?'https':'http') . '://'
 print "Getting URL: $url\n" if $plugin->opts->verbose >= 2;
 my $user_agent = LWP::UserAgent->new;
 my $request = HTTP::Request->new( GET=> $url );
+$request->header('User-Agent' => 'check_apache/1.00');
 if($plugin->opts->username && $plugin->opts->password) {
 	$request->authorization_basic(
 		$plugin->opts->username,

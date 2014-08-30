@@ -433,7 +433,7 @@ my $plugin = Nagios::Plugin->new(
     	    ."(-w <warning_threshold> -c <critical_threshold>) [-P <port>] "
 			."[-v] [-t <timeout>] [-S] [-u <username> -p <password>]",
 	version => '0.2.1',
-	url     => 'http://dann.stayskal.com/software/check_apache',
+	url     => 'http://danne.stayskal.com/software/check_apache',
 	license => 'This nagios plugin is free software, and comes with '
 			  ."ABSOLUTELY NO WARRANTY.\nIt may be used, redistributed "
 			  ."and/or modified under the terms of the \nGNU General "
@@ -835,16 +835,16 @@ Team.  Further reading on Nagios, NPRE, and Nagios Plugins is available at
 
 =head1 AUTHOR
 
-This script is written and maintained by Dann Stayskal <dann@stayskal.com>
+This script is written and maintained by Danne Stayskal <danne@stayskal.com>
 and is available on his website, at
-<http://dann.stayskal.com/software/check_apache/>.
+<http://danne.stayskal.com/software/check_apache/>.
 
 Thanks to dbenamy <http://github.com/dbenamy> for fixing
 the example configurations.
 
 =head1 LICENSE
 
-Copyright (C) 2009 by Dann Stayskal.
+Copyright (C) 2009 by Danne Stayskal.
 
 This program is free software; you can redistribute it and/or modify it under 
 the terms of the GNU General Public License as published by the Free Software 

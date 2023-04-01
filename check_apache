@@ -10,9 +10,9 @@ check_apache - Nagios plugin to poll Apache mod_status information
 
 use strict;
 
-use Data::Dumper;   ### For generating debug output in verbose mode
-use LWP::UserAgent; ### For communicating with the webserver
-use Nagios::Plugin; ### For communicating with the nagios server
+use Data::Dumper;       ### For generating debug output in verbose mode
+use LWP::UserAgent;     ### For communicating with the webserver
+use Monitoring::Plugin; ### For communicating with the nagios server
 
 
 ### Know what we're working with
@@ -427,7 +427,7 @@ my $available_measurements = join(', ', sort(keys(%measurements)));
 
 
 ### Initialize the plugin
-my $plugin = Nagios::Plugin->new( 
+my $plugin = Monitoring::Plugin->new(
 	shortname => "APACHE",
     usage => "Usage: check_apache -H <host_name> -m <measurement> "
     	    ."(-w <warning_threshold> -c <critical_threshold>) [-P <port>] "
@@ -830,7 +830,7 @@ L<Crypt::SSLeay> module installed.
 Thresholds given to this script should be in the format specified at 
 <http://nagiosplug.sourceforge.net/developer-guidelines.html#THRESHOLDFORMAT>.
 
-This module is built upon L<Nagios::Plugin> by the Nagios Plugin Development
+This module is built upon L<Monitoring::Plugin> by the Monitoring Plugin
 Team.  Further reading on Nagios, NPRE, and Nagios Plugins is available at
 <http://nagios.com/>.
 
